@@ -1,0 +1,41 @@
+{
+    "name": "rft/laravel-attachment",
+    "description": "Single source of truth transactional file attachment package and Yii2-style attachment widget for Laravel 12.x",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "attachment",
+        "file-upload",
+        "widget",
+        "rft"
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/contracts": "^11.0|^12.0",
+        "illuminate/database": "^11.0|^12.0",
+        "illuminate/filesystem": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/routing": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0",
+        "illuminate/view": "^11.0|^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Rft\\LaravelAttachment\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Rft\\LaravelAttachment\\LaravelAttachmentServiceProvider"
+            ],
+            "aliases": {
+                "Attachment": "Rft\\LaravelAttachment\\Facades\\Attachment",
+                "AttachmentWidget": "Rft\\LaravelAttachment\\Widgets\\AttachmentWidget"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
