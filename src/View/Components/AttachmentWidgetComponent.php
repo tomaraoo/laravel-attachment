@@ -22,6 +22,7 @@ class AttachmentWidgetComponent extends Component
     public string $inputName;
     public string $label;
     public string $accept;
+    public ?string $mimesToken;
     public int $maxFileSizeKb;
     public string $uploadUrl;
 
@@ -36,7 +37,8 @@ class AttachmentWidgetComponent extends Component
         ?string $inputName = null,
         string $label = 'File Attachments',
         ?string $accept = null,
-        ?int $maxFileSize = null
+        ?int $maxFileSize = null,
+        ?string $uploadUrl = null
     ) {
         [$this->modelClass, $this->modelId] = $model !== null
             ? Attachment::resolveModelAndId($model, $modelId)
@@ -55,8 +57,9 @@ class AttachmentWidgetComponent extends Component
         $this->inputName = $inputName ?? ($multiple ? 'attachments[]' : 'attachments');
         $this->label = $label;
         $this->accept = $accept ?? AttachmentWidget::defaultAcceptString();
+        $this->mimesToken = AttachmentWidget::makeMimesToken($this->accept);
         $this->maxFileSizeKb = $maxFileSize ?? (int) config('laravel-attachment.max_file_size', 10240);
-        $this->uploadUrl = route('rft.attachments.store');
+        $this->uploadUrl = $uploadUrl ?? route('rft.attachments.store');
     }
 
     public function render(): View

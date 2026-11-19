@@ -57,4 +57,18 @@ return [
         'txt', 'zip',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Non-Viewable File Extensions
+    |--------------------------------------------------------------------------
+    |
+    | Extensions that cannot be previewed inline in the browser (e.g. Excel
+    | workbooks). The widget hides the "View" button for these files and links
+    | the filename directly to download instead.
+    |
+    */
+    'non_viewable_extensions' => [
+        'xls', 'xlsx', 'xlsm', 'xlsb',
+    ],
+
 ];

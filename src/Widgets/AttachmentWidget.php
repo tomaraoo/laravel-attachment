@@ -4,6 +4,7 @@ namespace Rft\LaravelAttachment\Widgets;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use Rft\LaravelAttachment\Facades\Attachment;
 
@@ -42,6 +43,8 @@ class AttachmentWidget
         $label = $config['label'] ?? 'File Attachments';
         $accept = $config['accept'] ?? self::defaultAcceptString();
         $maxFileSizeKb = (int) ($config['maxFileSize'] ?? config('laravel-attachment.max_file_size', 10240));
+        $uploadUrl = $config['uploadUrl'] ?? route('rft.attachments.store');
+        $mimesToken = self::makeMimesToken($accept);
 
         return view('laravel-attachment::widget', [
             'widgetId' => $widgetId,
@@ -54,8 +57,9 @@ class AttachmentWidget
             'inputName' => $inputName,
             'label' => $label,
             'accept' => $accept,
+            'mimesToken' => $mimesToken,
             'maxFileSizeKb' => $maxFileSizeKb,
-            'uploadUrl' => route('rft.attachments.store'),
+            'uploadUrl' => $uploadUrl,
         ])->render();
     }
 
@@ -70,5 +74,42 @@ class AttachmentWidget
         }
 
         return implode(',', array_map(fn ($ext) => '.' . ltrim($ext, '.'), $allowed));
+    }
+
+    /**
+     * Extract normalized lowercase file extensions from an HTML accept string (e.g. ".xlsx,.xls").
+     *
+     * @return array<int, string>
+     */
+    public static function parseAcceptExtensions(?string $accept): array
+    {
+        $accept = trim((string) $accept);
+        if ($accept === '' || $accept === '*/*') {
+            return [];
+        }
+
+        $extensions = [];
+        foreach (explode(',', $accept) as $part) {
+            $ext = strtolower(ltrim(trim($part), '.'));
+            if ($ext !== '' && preg_match('/^[a-z0-9]+$/', $ext)) {
+                $extensions[] = $ext;
+            }
+        }
+
+        return array_values(array_unique($extensions));
+    }
+
+    /**
+     * Generate a tamper-proof encrypted token encoding the widget's allowed extensions
+     * so AttachmentController::store() enforces per-widget restrictions server-side.
+     */
+    public static function makeMimesToken(?string $accept): ?string
+    {
+        $extensions = self::parseAcceptExtensions($accept);
+        if (empty($extensions)) {
+            return null;
+        }
+
+        return Crypt::encryptString(implode(',', $extensions));
     }
 }

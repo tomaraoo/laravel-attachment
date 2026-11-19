@@ -130,6 +130,8 @@
      data-upload-url="{{ $uploadUrl }}"
      data-auto-upload="{{ $autoUpload ? '1' : '0' }}"
      data-multiple="{{ $multiple ? '1' : '0' }}"
+     data-accept="{{ $accept }}"
+     data-mimes-token="{{ $mimesToken ?? '' }}"
      data-max-size="{{ $maxFileSizeKb }}"
      data-csrf="{{ csrf_token() }}">
 
@@ -158,6 +160,9 @@
                 Drag &amp; drop files here or click to select
             </div>
             <div class="small text-muted">
+                @if(!empty($accept) && $accept !== '*/*')
+                    Allowed: {{ str_replace(',', ', ', $accept) }} &bull;
+                @endif
                 Max file size: {{ number_format($maxFileSizeKb / 1024, 1) }} MB
                 @if(!$autoUpload)
                     &bull; Files will be uploaded when you save the form
@@ -182,22 +187,30 @@
                         </div>
                     @endif
                     <div class="rft-attachment-meta">
-                        <a href="{{ $attachment->view_url }}" target="_blank" rel="noopener" class="rft-attachment-name" title="{{ $attachment->file_name }}">
-                            {{ $attachment->file_name }}
-                        </a>
+                        @if($attachment->is_viewable)
+                            <a href="{{ $attachment->view_url }}" target="_blank" rel="noopener" class="rft-attachment-name" title="{{ $attachment->file_name }}">
+                                {{ $attachment->file_name }}
+                            </a>
+                        @else
+                            <a href="{{ $attachment->download_url }}" class="rft-attachment-name" title="{{ $attachment->file_name }}">
+                                {{ $attachment->file_name }}
+                            </a>
+                        @endif
                         <div class="rft-attachment-date">
                             Uploaded {{ $attachment->created_at?->format('Y-m-d H:i:s') }}
                         </div>
                     </div>
                 </div>
                 <div class="rft-attachment-actions">
-                    <a href="{{ $attachment->view_url }}"
-                       target="_blank"
-                       rel="noopener"
-                       class="btn btn-sm btn-outline-secondary"
-                       title="View file">
-                        View
-                    </a>
+                    @if($attachment->is_viewable)
+                        <a href="{{ $attachment->view_url }}"
+                           target="_blank"
+                           rel="noopener"
+                           class="btn btn-sm btn-outline-secondary"
+                           title="View file">
+                            View
+                        </a>
+                    @endif
                     <a href="{{ $attachment->download_url }}"
                        class="btn btn-sm btn-outline-primary"
                        title="Download file">
@@ -223,8 +236,16 @@
 </div>
 
 @once
+@php
+    $nonViewableExtensions = array_map(
+        'strtolower',
+        (array) config('laravel-attachment.non_viewable_extensions', ['xls', 'xlsx', 'xlsm', 'xlsb'])
+    );
+@endphp
 <script>
 (function () {
+    const NON_VIEWABLE_EXTENSIONS = @json($nonViewableExtensions);
+
     function initRftAttachmentWidget(container) {
         if (!container || container.dataset.rftInitialized === '1') {
             return;
@@ -244,6 +265,11 @@
         const modelId = container.dataset.modelId || '';
         const uploadUrl = container.dataset.uploadUrl || '';
         const autoUpload = container.dataset.autoUpload === '1';
+        const acceptAttr = (container.dataset.accept || '*/*').trim();
+        const mimesToken = container.dataset.mimesToken || '';
+        const allowedExtensions = (acceptAttr && acceptAttr !== '*/*')
+            ? acceptAttr.split(',').map(s => s.trim().toLowerCase().replace(/^\./, '')).filter(Boolean)
+            : [];
         const maxSizeKb = parseInt(container.dataset.maxSize || '10240', 10);
         const csrfToken = container.dataset.csrf || (document.querySelector('meta[name="csrf-token"]')?.content ?? '');
 
@@ -290,24 +316,35 @@
             div.className = 'rft-attachment-item';
             div.dataset.fileUrl = item.file_url;
 
+            const ext = (item.extension || '').toLowerCase();
+            const isViewable = item.is_viewable !== undefined
+                ? Boolean(item.is_viewable)
+                : !NON_VIEWABLE_EXTENSIONS.includes(ext);
+
             const thumbHtml = item.is_image
                 ? `<img src="${escapeHtml(item.view_url)}" alt="${escapeHtml(item.file_name)}" class="rft-attachment-thumb">`
                 : `<div class="rft-attachment-thumb">${escapeHtml(item.extension || 'FILE')}</div>`;
+
+            const nameLinkHtml = isViewable
+                ? `<a href="${escapeHtml(item.view_url)}" target="_blank" rel="noopener" class="rft-attachment-name" title="${escapeHtml(item.file_name)}">${escapeHtml(item.file_name)}</a>`
+                : `<a href="${escapeHtml(item.download_url)}" class="rft-attachment-name" title="${escapeHtml(item.file_name)}">${escapeHtml(item.file_name)}</a>`;
+
+            const viewBtnHtml = isViewable
+                ? `<a href="${escapeHtml(item.view_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" title="View file">View</a>`
+                : '';
 
             div.innerHTML = `
                 <div class="rft-attachment-info">
                     ${thumbHtml}
                     <div class="rft-attachment-meta">
-                        <a href="${escapeHtml(item.view_url)}" target="_blank" rel="noopener" class="rft-attachment-name" title="${escapeHtml(item.file_name)}">
-                            ${escapeHtml(item.file_name)}
-                        </a>
+                        ${nameLinkHtml}
                         <div class="rft-attachment-date">
                             Uploaded ${escapeHtml(item.created_at || 'just now')}
                         </div>
                     </div>
                 </div>
                 <div class="rft-attachment-actions">
-                    <a href="${escapeHtml(item.view_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" title="View file">View</a>
+                    ${viewBtnHtml}
                     <a href="${escapeHtml(item.download_url)}" class="btn btn-sm btn-outline-primary" title="Download file">Download</a>
                     <button type="button" class="btn btn-sm btn-outline-danger rft-delete-btn" data-delete-url="${escapeHtml(item.delete_url)}" data-file-url="${escapeHtml(item.file_url)}" title="Delete attachment">Delete</button>
                 </div>
@@ -349,8 +386,17 @@
             if (!files || files.length === 0) return;
 
             for (const file of files) {
+                if (allowedExtensions.length > 0) {
+                    const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+                    if (!allowedExtensions.includes(ext)) {
+                        showError(`File "${file.name}" is not allowed. Accepted file types: ${acceptAttr.replace(/,/g, ', ')}.`);
+                        if (fileInput) fileInput.value = '';
+                        return;
+                    }
+                }
                 if (file.size > maxSizeKb * 1024) {
                     showError(`File "${file.name}" exceeds maximum allowed size of ${(maxSizeKb / 1024).toFixed(1)} MB.`);
+                    if (fileInput) fileInput.value = '';
                     return;
                 }
             }
@@ -368,6 +414,9 @@
             formData.append('model', modelClass);
             if (modelId !== '') {
                 formData.append('model_id', modelId);
+            }
+            if (mimesToken !== '') {
+                formData.append('mimes_token', mimesToken);
             }
             for (const file of files) {
                 formData.append('files[]', file);

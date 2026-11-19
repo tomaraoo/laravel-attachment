@@ -2,16 +2,20 @@
 
 namespace Rft\LaravelAttachment\Http\Controllers;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use LogicException;
 use Rft\LaravelAttachment\Facades\Attachment;
 use Rft\LaravelAttachment\Models\FileAttachment;
+use Rft\LaravelAttachment\Widgets\AttachmentWidget;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttachmentController extends Controller
@@ -92,10 +96,39 @@ class AttachmentController extends Controller
         $maxSize = (int) config('laravel-attachment.max_file_size', 10240);
         $allowedMimes = config('laravel-attachment.allowed_mimes', []);
 
+        if ($request->filled('mimes_token')) {
+            try {
+                $decrypted = Crypt::decryptString((string) $request->input('mimes_token'));
+            } catch (DecryptException $e) {
+                throw ValidationException::withMessages([
+                    'files' => ['Invalid file type restriction token. Please refresh the page and try again.'],
+                ]);
+            }
+
+            $widgetMimes = AttachmentWidget::parseAcceptExtensions($decrypted);
+            if (! empty($widgetMimes)) {
+                if (! empty($allowedMimes) && $allowedMimes !== ['*']) {
+                    $globalNormalized = array_map('strtolower', $allowedMimes);
+                    $allowedMimes = array_values(array_intersect($widgetMimes, $globalNormalized));
+                    if (empty($allowedMimes)) {
+                        $allowedMimes = $widgetMimes;
+                    }
+                } else {
+                    $allowedMimes = $widgetMimes;
+                }
+            }
+        }
+
         $fileRules = ['required', 'file', "max:{$maxSize}"];
         if (! empty($allowedMimes) && $allowedMimes !== ['*']) {
             $fileRules[] = 'mimes:' . implode(',', $allowedMimes);
         }
+
+        $allowedLabel = implode(', ', array_map(fn ($ext) => '.' . ltrim($ext, '.'), $allowedMimes));
+        $messages = (! empty($allowedMimes) && $allowedMimes !== ['*']) ? [
+            'files.*.mimes' => "Only {$allowedLabel} files are allowed.",
+            'file.mimes' => "Only {$allowedLabel} files are allowed.",
+        ] : [];
 
         if ($request->hasFile('files')) {
             $request->validate([
@@ -103,14 +136,14 @@ class AttachmentController extends Controller
                 'model_id' => ['nullable'],
                 'files' => ['required', 'array', 'min:1'],
                 'files.*' => $fileRules,
-            ]);
+            ], $messages);
             $uploadedFiles = $request->file('files');
         } else {
             $request->validate([
                 'model' => ['required', 'string', 'max:255'],
                 'model_id' => ['nullable'],
                 'file' => $fileRules,
-            ]);
+            ], $messages);
             $uploadedFiles = [$request->file('file')];
         }
 
@@ -137,6 +170,7 @@ class AttachmentController extends Controller
                     'download_url' => $item->download_url,
                     'delete_url' => $item->delete_url,
                     'is_image' => $item->is_image,
+                    'is_viewable' => $item->is_viewable,
                     'extension' => $item->extension,
                 ])->values(),
             ], 201);

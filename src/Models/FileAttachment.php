@@ -53,6 +53,7 @@ class FileAttachment extends Model
         'download_url',
         'delete_url',
         'is_image',
+        'is_viewable',
         'extension',
     ];
 
@@ -193,5 +194,18 @@ class FileAttachment extends Model
     public function getIsImageAttribute(): bool
     {
         return in_array($this->extension, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'], true);
+    }
+
+    /**
+     * Determine whether the file can be previewed inline in the browser.
+     */
+    public function getIsViewableAttribute(): bool
+    {
+        $nonViewable = array_map(
+            'strtolower',
+            (array) config('laravel-attachment.non_viewable_extensions', ['xls', 'xlsx', 'xlsm', 'xlsb'])
+        );
+
+        return ! in_array($this->extension, $nonViewable, true);
     }
 }

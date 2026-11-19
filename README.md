@@ -42,6 +42,9 @@ class Senior extends Model
 {{-- Or passing model class and ID explicitly --}}
 <x-rft-attachment model="App\Models\Senior" :model-id="$senior->id" />
 
+{{-- Restrict allowed file types per widget (enforced client-side and server-side) --}}
+<x-rft-attachment :model="$senior" accept=".xlsx,.xls" label="Excel Reports" />
+
 {{-- Read-only view mode --}}
 <x-rft-attachment :model="$senior" :readonly="true" />
 ```
