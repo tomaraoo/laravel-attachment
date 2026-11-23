@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Rft\LaravelAttachment\Facades\Attachment;
 use Rft\LaravelAttachment\Models\FileAttachment;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 trait HasAttachments
 {
@@ -47,6 +48,46 @@ trait HasAttachments
     public function attachFromRequest(Request $request, string $inputName = 'attachments', ?int $userId = null): Collection
     {
         return Attachment::storeFromRequest($request, $this, $this->getKey(), $inputName, $userId);
+    }
+
+    /**
+     * Find a specific attachment belonging to this model instance by its hashed file_url.
+     */
+    public function findAttachment(string $fileUrl): ?FileAttachment
+    {
+        return Attachment::findForModel($this, $this->getKey(), $fileUrl);
+    }
+
+    /**
+     * Find a specific attachment belonging to this model instance by its hashed file_url or fail with 404.
+     */
+    public function findAttachmentOrFail(string $fileUrl): FileAttachment
+    {
+        return Attachment::findForModelOrFail($this, $this->getKey(), $fileUrl);
+    }
+
+    /**
+     * Stream (view inline) an attachment belonging to this model instance.
+     */
+    public function streamAttachment(string $fileUrl): StreamedResponse
+    {
+        return Attachment::stream($this->findAttachmentOrFail($fileUrl));
+    }
+
+    /**
+     * Download an attachment belonging to this model instance.
+     */
+    public function downloadAttachment(string $fileUrl): StreamedResponse
+    {
+        return Attachment::download($this->findAttachmentOrFail($fileUrl));
+    }
+
+    /**
+     * Delete a specific attachment belonging to this model instance transactionally.
+     */
+    public function deleteAttachment(string $fileUrl): bool
+    {
+        return Attachment::deleteForModelByUrl($this, $this->getKey(), $fileUrl);
     }
 
     /**

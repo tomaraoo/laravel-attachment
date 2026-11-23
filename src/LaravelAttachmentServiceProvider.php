@@ -2,9 +2,7 @@
 
 namespace Rft\LaravelAttachment;
 
-use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
-use Rft\LaravelAttachment\View\Components\AttachmentWidgetComponent;
 
 class LaravelAttachmentServiceProvider extends ServiceProvider
 {
@@ -32,16 +30,11 @@ class LaravelAttachmentServiceProvider extends ServiceProvider
     {
         $this->ensurePrivateDiskConfigured();
 
-        $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+        if (config('laravel-attachment.routes.enabled', true)) {
+            $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+        }
+
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-attachment');
-
-        Blade::component('rft-attachment', AttachmentWidgetComponent::class);
-        Blade::component('attachment-widget', AttachmentWidgetComponent::class);
-
-        Blade::directive('attachmentWidget', function (string $expression) {
-            return "<?php echo \\Rft\\LaravelAttachment\\Widgets\\AttachmentWidget::widget({$expression}); ?>";
-        });
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
@@ -51,10 +44,6 @@ class LaravelAttachmentServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__ . '/../database/migrations' => database_path('migrations'),
             ], 'laravel-attachment-migrations');
-
-            $this->publishes([
-                __DIR__ . '/../resources/views' => resource_path('views/vendor/laravel-attachment'),
-            ], 'laravel-attachment-views');
         }
     }
 

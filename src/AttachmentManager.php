@@ -153,6 +153,42 @@ class AttachmentManager
     }
 
     /**
+     * Find an attachment scoped to a specific model class (and optional model ID) by hashed file_url.
+     */
+    public function findForModel(Model|string $model, int|string|null $modelId, string $fileUrl): ?FileAttachment
+    {
+        [$modelClass, $resolvedModelId] = $this->resolveModelAndId($model, $modelId);
+
+        $query = FileAttachment::query()
+            ->where('model', $modelClass)
+            ->where('file_url', $fileUrl);
+
+        if ($resolvedModelId !== null) {
+            $query->where('model_id', $resolvedModelId);
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * Find an attachment scoped to a specific model class (and optional model ID) or fail with 404.
+     */
+    public function findForModelOrFail(Model|string $model, int|string|null $modelId, string $fileUrl): FileAttachment
+    {
+        [$modelClass, $resolvedModelId] = $this->resolveModelAndId($model, $modelId);
+
+        $query = FileAttachment::query()
+            ->where('model', $modelClass)
+            ->where('file_url', $fileUrl);
+
+        if ($resolvedModelId !== null) {
+            $query->where('model_id', $resolvedModelId);
+        }
+
+        return $query->firstOrFail();
+    }
+
+    /**
      * Retrieve all attachments for a given model class (and optional model ID).
      *
      * @return Collection<int, FileAttachment>
@@ -173,13 +209,16 @@ class AttachmentManager
     }
 
     /**
-     * Stream (view inline) or download an attachment via its hashed file_url.
+     * Stream (view inline) or download an attachment via a FileAttachment instance or its hashed file_url.
      */
-    public function response(string $fileUrl, bool $download = false): StreamedResponse
+    public function response(FileAttachment|string $attachment, bool $download = false): StreamedResponse
     {
-        $attachment = $this->findByUrlOrFail($fileUrl);
+        $record = $attachment instanceof FileAttachment
+            ? $attachment
+            : $this->findByUrlOrFail($attachment);
+
         $disk = $this->diskName();
-        $storagePath = $attachment->getStoragePath();
+        $storagePath = $record->getStoragePath();
 
         abort_unless(
             Storage::disk($disk)->exists($storagePath),
@@ -194,10 +233,26 @@ class AttachmentManager
         ];
 
         if ($download) {
-            return Storage::disk($disk)->download($storagePath, $attachment->file_name, $headers);
+            return Storage::disk($disk)->download($storagePath, $record->file_name, $headers);
         }
 
-        return Storage::disk($disk)->response($storagePath, $attachment->file_name, $headers);
+        return Storage::disk($disk)->response($storagePath, $record->file_name, $headers);
+    }
+
+    /**
+     * Stream (view inline) an attachment via a FileAttachment instance or its hashed file_url.
+     */
+    public function stream(FileAttachment|string $attachment): StreamedResponse
+    {
+        return $this->response($attachment, false);
+    }
+
+    /**
+     * Download an attachment via a FileAttachment instance or its hashed file_url.
+     */
+    public function download(FileAttachment|string $attachment): StreamedResponse
+    {
+        return $this->response($attachment, true);
     }
 
     /**
@@ -206,6 +261,18 @@ class AttachmentManager
     public function deleteByUrl(string $fileUrl): bool
     {
         $attachment = $this->findByUrlOrFail($fileUrl);
+
+        return DB::transaction(function () use ($attachment) {
+            return (bool) $attachment->delete();
+        });
+    }
+
+    /**
+     * Delete a specific attachment belonging to a model record transactionally by hashed file_url.
+     */
+    public function deleteForModelByUrl(Model|string $model, int|string|null $modelId, string $fileUrl): bool
+    {
+        $attachment = $this->findForModelOrFail($model, $modelId, $fileUrl);
 
         return DB::transaction(function () use ($attachment) {
             return (bool) $attachment->delete();

@@ -31,11 +31,13 @@ return [
     | Route Configuration
     |--------------------------------------------------------------------------
     |
-    | This defines the URL prefix and middleware for viewing, uploading,
-    | and deleting attachments via their hashed file_url token.
+    | Controls the optional built-in streaming/downloading route keyed by the
+    | hashed file_url token. Set 'enabled' to false if you prefer to declare
+    | streaming and downloading exclusively inside your own controllers.
     |
     */
     'routes' => [
+        'enabled' => env('RFT_ATTACHMENT_ROUTES_ENABLED', true),
         'prefix' => env('RFT_ATTACHMENT_PREFIX', 'attachments'),
         'middleware' => ['web'],
     ],
@@ -63,8 +65,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Extensions that cannot be previewed inline in the browser (e.g. Excel
-    | workbooks). The widget hides the "View" button for these files and links
-    | the filename directly to download instead.
+    | workbooks). Used by FileAttachment::getIsViewableAttribute().
     |
     */
     'non_viewable_extensions' => [

@@ -1,6 +1,8 @@
 # rft/laravel-attachment
 
-Single source of truth transactional file attachment package and Yii2-style attachment widget for Laravel 12.x.
+Headless single source of truth transactional file attachment package for Laravel 11.x / 12.x.
+
+This package ships **no Blade views, UI widgets, or display pages** so your application's existing page designs remain completely untouched. Simply add the `HasAttachments` trait to any Eloquent model and manage attachments from your own controllers and models.
 
 ## Features
 - **Single Source of Truth Table**: `file-attachement`
@@ -8,12 +10,12 @@ Single source of truth transactional file attachment package and Yii2-style atta
   - `model` (e.g. `App\Models\Senior`)
   - `model_id` (target record ID)
   - `file_name` (original file name)
-  - `file_url` (unique SHA-256 hash serving as the URL access point for all views, downloads, and deletes)
+  - `file_url` (unique SHA-256 hash serving as the access token)
   - `user_id` (uploader user ID)
   - `created_at`
 - **Private Storage**: Stores all physical files in `storage/app/private/{file_url}`.
 - **Strictly Transactional**: Insert and delete only. Updating attachment records is blocked at the model level, and all file writes/removals run inside database transactions.
-- **Yii2-Style Attachment Widget**: Render via Blade Component (`<x-rft-attachment />`), Directive (`@attachmentWidget`), or static call (`AttachmentWidget::widget([...])`).
+- **Headless / Zero Views**: No views, no demo pages, no forced upload/delete routes—only model/facade APIs and streaming/downloading.
 
 ## Usage
 
@@ -32,32 +34,42 @@ class Senior extends Model
 }
 ```
 
-### 2. Rendering the Attachment Widget in Blade
+### 2. Saving, Reading, Streaming & Deleting from Your Own Controller
 
-**Blade Component:**
-```blade
-{{-- Instant AJAX upload & delete for an existing model --}}
-<x-rft-attachment :model="$senior" label="Supporting Documents" />
+```php
+// Attach single file
+$attachment = $senior->attachFile($request->file('document'));
 
-{{-- Or passing model class and ID explicitly --}}
-<x-rft-attachment model="App\Models\Senior" :model-id="$senior->id" />
+// Attach multiple files from an HTTP request input
+$attachments = $senior->attachFromRequest($request, 'attachments');
 
-{{-- Restrict allowed file types per widget (enforced client-side and server-side) --}}
-<x-rft-attachment :model="$senior" accept=".xlsx,.xls" label="Excel Reports" />
+// Query all attachments for a model
+$files = $senior->attachments;
 
-{{-- Read-only view mode --}}
-<x-rft-attachment :model="$senior" :readonly="true" />
-```
+// Stream (inline view) or download scoped to the model in your own controller
+public function viewDocument(Senior $senior, string $fileUrl)
+{
+    return $senior->streamAttachment($fileUrl);
+}
 
-**Yii2-Style Static Widget Call:**
-```blade
-{!! \Rft\LaravelAttachment\Widgets\AttachmentWidget::widget([
-    'model' => $senior,
-    'label' => 'Senior Citizen Attachments',
-]) !!}
+public function downloadDocument(Senior $senior, string $fileUrl)
+{
+    return $senior->downloadAttachment($fileUrl);
+}
+
+// Or directly from a FileAttachment instance
+$attachment->stream();
+$attachment->download();
+
+// Delete a single attachment scoped to the model (transactional)
+$senior->deleteAttachment($fileUrl);
+
+// Delete all attachments for the model (transactional)
+$senior->deleteAttachments();
 ```
 
 ### 3. Programmatic Usage (`Attachment` Facade)
+
 ```php
 use Rft\LaravelAttachment\Facades\Attachment;
 
@@ -67,11 +79,22 @@ $attachment = Attachment::store($request->file('document'), $senior);
 // Upload multiple files from request
 $attachments = Attachment::storeFromRequest($request, $senior, $senior->id, 'attachments');
 
-// Access URLs (all keyed by hashed file_url)
-$viewUrl = $attachment->view_url;         // GET /attachments/{file_url}
-$downloadUrl = $attachment->download_url; // GET /attachments/{file_url}?download=1
-$deleteUrl = $attachment->delete_url;     // DELETE /attachments/{file_url}
+// Stream or download by hashed file_url
+return Attachment::stream($attachment->file_url);
+return Attachment::download($attachment->file_url);
 
 // Delete transactionally by hashed file_url
 Attachment::deleteByUrl($attachment->file_url);
+```
+
+### 4. Built-in Streaming/Downloading Route (Optional)
+
+By default, the package registers a single read-only route for streaming/downloading via the hashed `file_url`:
+- `GET /attachments/{file_url}` — stream inline (`$attachment->view_url`)
+- `GET /attachments/{file_url}?download=1` — download (`$attachment->download_url`)
+
+If you prefer to declare streaming/downloading strictly inside your own model/controller routes, disable the built-in route in `config/laravel-attachment.php` (or `.env`):
+
+```env
+RFT_ATTACHMENT_ROUTES_ENABLED=false
 ```

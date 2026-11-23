@@ -5,8 +5,11 @@ namespace Rft\LaravelAttachment\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use LogicException;
+use Rft\LaravelAttachment\Facades\Attachment;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FileAttachment extends Model
 {
@@ -51,7 +54,6 @@ class FileAttachment extends Model
     protected $appends = [
         'view_url',
         'download_url',
-        'delete_url',
         'is_image',
         'is_viewable',
         'extension',
@@ -157,27 +159,43 @@ class FileAttachment extends Model
     }
 
     /**
-     * URL access point for viewing/streaming the attachment inline.
+     * Stream (view inline) this attachment directly from a controller.
      */
-    public function getViewUrlAttribute(): string
+    public function stream(): StreamedResponse
     {
+        return Attachment::stream($this);
+    }
+
+    /**
+     * Download this attachment directly from a controller.
+     */
+    public function download(): StreamedResponse
+    {
+        return Attachment::download($this);
+    }
+
+    /**
+     * URL access point for viewing/streaming the attachment inline (null if package routes are disabled).
+     */
+    public function getViewUrlAttribute(): ?string
+    {
+        if (! Route::has('rft.attachments.show')) {
+            return null;
+        }
+
         return route('rft.attachments.show', ['file_url' => $this->file_url]);
     }
 
     /**
-     * URL access point for downloading the attachment.
+     * URL access point for downloading the attachment (null if package routes are disabled).
      */
-    public function getDownloadUrlAttribute(): string
+    public function getDownloadUrlAttribute(): ?string
     {
-        return route('rft.attachments.show', ['file_url' => $this->file_url, 'download' => 1]);
-    }
+        if (! Route::has('rft.attachments.show')) {
+            return null;
+        }
 
-    /**
-     * URL access point for deleting the attachment.
-     */
-    public function getDeleteUrlAttribute(): string
-    {
-        return route('rft.attachments.destroy', ['file_url' => $this->file_url]);
+        return route('rft.attachments.show', ['file_url' => $this->file_url, 'download' => 1]);
     }
 
     /**
